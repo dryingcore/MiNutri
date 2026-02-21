@@ -17,6 +17,7 @@ export interface Meal extends Nutrients {
   id: string;
   name: string;
   timestamp: Date;
+  category?: 'Doce' | 'Salgado' | 'Bebida' | 'Outro';
   imageUrl?: string;
   breakdown?: Array<{ item: string; grams: number; calories: number }>;
 }
@@ -45,7 +46,7 @@ export interface SymptomLog {
 
 export interface MealPlanDay {
   date: string; // YYYY-MM-DD
-  meals: Array<{ id: string; title: string; image?: string; instructions?: string; readyInMinutes?: number }>;
+  meals: Array<{ id: string; title: string; image?: string; instructions?: string; readyInMinutes?: number; difficulty?: 'Fácil' | 'Média' | 'Difícil' }>;
   nutrients: { calories: number; protein: number; fat: number; carbohydrates: number };
 }
 
@@ -55,4 +56,5 @@ export interface ShoppingItem {
   amount: number;
   unit: string;
   acquired: boolean;
+  recipeName?: string;
 }

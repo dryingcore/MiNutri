@@ -23,6 +23,7 @@ export interface Routine {
   breakfastTime: string; // '08:00'
   lunchTime: string; // '12:30'
   dinnerTime: string; // '20:00'
+  mealsPerDay: number;
   hydrationGoalMs: number; // usually 2000ml to 3000ml
   darkMode: boolean;
 }
@@ -46,7 +47,7 @@ interface ProfileContextData {
 
 const defaultAnthro: Anthropometry = { weight: 70, height: 170, age: 30, gender: 'M', activityLevel: 'light', goal: 'maintain' };
 const defaultPrefs: Preferences = { diet: 'none', allergies: [], aversions: [] };
-const defaultRoutine: Routine = { breakfastTime: '08:00', lunchTime: '12:30', dinnerTime: '19:30', hydrationGoalMs: 2000, darkMode: false };
+const defaultRoutine: Routine = { breakfastTime: '08:00', lunchTime: '12:30', dinnerTime: '19:30', mealsPerDay: 4, hydrationGoalMs: 2000, darkMode: false };
 
 const ProfileContext = createContext<ProfileContextData>({} as ProfileContextData);
 
@@ -71,9 +72,9 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const prefs = await AsyncStorage.getItem('@minutri_prefs');
       const rt = await AsyncStorage.getItem('@minutri_routine');
       
-      if (anthro) setAnthroState(JSON.parse(anthro));
-      if (prefs) setPrefsState(JSON.parse(prefs));
-      if (rt) setRoutineState(JSON.parse(rt));
+      if (anthro) setAnthroState({ ...defaultAnthro, ...JSON.parse(anthro) });
+      if (prefs) setPrefsState({ ...defaultPrefs, ...JSON.parse(prefs) });
+      if (rt) setRoutineState({ ...defaultRoutine, ...JSON.parse(rt) });
     } catch (e) {
       console.error("Failed to load profile", e);
     } finally {

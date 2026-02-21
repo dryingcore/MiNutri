@@ -78,6 +78,7 @@ export const calculateMacros = async (mealName: string, ingredients: IdentifiedI
          "vitaminA": number, // em mcg
          "vitaminC": number // em mg
       },
+      "category": "Doce" | "Salgado" | "Bebida" | "Outro",
       "breakdown": [
         { "item": string, "grams": number, "calories": number }
       ] 

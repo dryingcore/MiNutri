@@ -18,10 +18,13 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   
   // Tabs & Modes
-  const [activeMode, setActiveMode] = useState<'plate' | 'barcode'>('plate');
+  const [activeMode, setActiveMode] = useState<'plate' | 'barcode' | 'barcode-details'>('plate');
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [isFetchingBarcode, setIsFetchingBarcode] = useState(false);
+  
+  const [scannedProduct, setScannedProduct] = useState<any>(null);
+  const [consumedAmount, setConsumedAmount] = useState('100');
 
   // New States for Two-Step Process
   const [step, setStep] = useState<1 | 2>(1);
@@ -51,27 +54,37 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
     try {
         const product = await fetchProductByBarcode(data);
         
-        const newMeal: Meal = {
-            id: Math.random().toString(36).substring(7),
-            timestamp: new Date(),
-            imageUrl: product.image || undefined,
-            name: product.productName,
-            calories: product.macros.calories || 0,
-            protein: product.macros.protein || 0,
-            carbs: product.macros.carbs || 0,
-            fat: product.macros.fat || 0,
-            breakdown: [{item: product.productName, grams: 100, calories: product.macros.calories || 0}], 
-        };
-
-        await addMeal(newMeal);
-        Toast.show({ type: 'success', text1: '✅ Produto Encontrado!', text2: `${product.brand} - ${product.productName} registrado (100g/ml)` });
-        navigation.goBack();
+        setScannedProduct(product);
+        setConsumedAmount('100');
+        setActiveMode('barcode-details');
     } catch (e: any) {
         Toast.show({ type: 'error', text1: 'Erro no Escaneamento', text2: e.message });
         setTimeout(() => setScanned(false), 2500); // allow scanning again after 2.5s if it fails
     } finally {
         setIsFetchingBarcode(false);
     }
+  };
+
+  const handleConfirmBarcode = async () => {
+      const amount = parseFloat(consumedAmount) || 100;
+      const ratio = amount / 100;
+
+      const newMeal: Meal = {
+          id: Math.random().toString(36).substring(7),
+          timestamp: new Date(),
+          imageUrl: scannedProduct?.image || undefined,
+          name: scannedProduct?.productName || 'Produto Desconhecido',
+          calories: (scannedProduct?.macros.calories || 0) * ratio,
+          protein: (scannedProduct?.macros.protein || 0) * ratio,
+          carbs: (scannedProduct?.macros.carbs || 0) * ratio,
+          fat: (scannedProduct?.macros.fat || 0) * ratio,
+          breakdown: [{item: scannedProduct?.productName, grams: amount, calories: (scannedProduct?.macros.calories || 0) * ratio}], 
+          category: 'Outro'
+      };
+
+      await addMeal(newMeal);
+      Toast.show({ type: 'success', text1: '✅ Produto Salvo!', text2: `${scannedProduct?.brand} - ${scannedProduct?.productName} registrado.` });
+      navigation.goBack();
   };
 
 
@@ -254,6 +267,30 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
                           </View>
                       )}
                   </View>
+              </View>
+          ) : activeMode === 'barcode-details' ? (
+              // ========= BARCODE DETAILS UI =========
+              <View style={styles.stepContainer}>
+                  <View style={styles.headerBlock}>
+                    <Text style={styles.title}>Quantidade Consumida</Text>
+                    <Text style={styles.subtitle}>{scannedProduct?.productName}</Text>
+                  </View>
+
+                  <View style={styles.nameInputContainer}>
+                      <Text style={styles.label}>Gramas ou ML consumidos</Text>
+                      <TextInput 
+                          style={styles.input}
+                          value={consumedAmount}
+                          onChangeText={setConsumedAmount}
+                          keyboardType="numeric"
+                      />
+                  </View>
+                  <TouchableOpacity style={styles.primaryButtonWrapper} onPress={handleConfirmBarcode}>
+                      <LinearGradient colors={['#10B981', '#059669']} start={{x: 0, y: 0}} end={{x: 1, y: 1}} style={styles.primaryButtonGradient}>
+                          <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                          <Text style={styles.primaryButtonText}>Confirmar e Salvar</Text>
+                      </LinearGradient>
+                  </TouchableOpacity>
               </View>
           ) : step === 1 ? (
               // ========= STEP 1 (PLATE) UI =========

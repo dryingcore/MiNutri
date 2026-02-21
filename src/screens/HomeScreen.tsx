@@ -7,6 +7,7 @@ import { useProfile } from '../contexts/ProfileContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { PieChart, BarChart } from 'react-native-gifted-charts';
+import { FireAnimation, LiquidAnimation } from '../components/animations/GamificationAnimations';
 
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   const { user } = useAuth();
@@ -43,6 +44,13 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       if (hour < 18) return 'Boa tarde';
       return 'Boa noite';
   };
+
+  const groupedMeals = todaysMeals.reduce((acc, meal) => {
+      const cat = meal.category || 'Outro';
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(meal);
+      return acc;
+  }, {} as Record<string, typeof todaysMeals>);
 
   const screenWidth = Dimensions.get('window').width;
 
@@ -89,25 +97,32 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
       {/* Gamification Row */}
       <View style={styles.gamificationRow}>
-          <View style={styles.streakBadge}>
-              <Ionicons name="flame" size={20} color="#EA580C" />
-              <Text style={styles.streakText}>{currentStreak} Dias Seguidos</Text>
+          <View style={[styles.streakBadge, { overflow: 'hidden', paddingHorizontal: 0, paddingVertical: 0 }]}>
+              <FireAnimation />
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 8, flex: 1 }}>
+                  <Ionicons name="flame" size={20} color="#EA580C" />
+                  <Text style={styles.streakText}>{currentStreak} Dias Seguidos</Text>
+              </View>
           </View>
           <TouchableOpacity 
-              style={[styles.streakBadge, {backgroundColor: '#DBEAFE'}]}
+              style={[styles.streakBadge, { backgroundColor: '#DBEAFE', overflow: 'hidden', paddingHorizontal: 0, paddingVertical: 0 }]}
               onPress={() => navigation.navigate('Hydration')}
+              activeOpacity={0.8}
           >
-              <Ionicons name="water" size={20} color="#2563EB" />
-              <View style={{ flex: 1 }}>
-                  <Text style={[styles.streakText, {color: '#1E3A8A'}]}>
-                      {Math.round(Math.min((todaysHydrationMl / dynamicGoal.waterMl)*100, 100))}% Hidratado
-                  </Text>
-                  <Text style={{ fontSize: 10, color: '#3B82F6', fontWeight: '600', marginTop: 2 }}>
-                      {Math.max(dynamicGoal.waterMl - todaysHydrationMl, 0)} ml restantes
-                  </Text>
-              </View>
-              <View style={styles.waterAddBtn}>
-                  <Ionicons name="add" size={14} color="#1E3A8A" />
+              <LiquidAnimation percentage={Math.round(Math.min((todaysHydrationMl / dynamicGoal.waterMl)*100, 100))} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 8, flex: 1 }}>
+                  <Ionicons name="water" size={20} color="#2563EB" />
+                  <View style={{ flex: 1 }}>
+                      <Text style={[styles.streakText, {color: '#1E3A8A'}]}>
+                          {Math.round(Math.min((todaysHydrationMl / dynamicGoal.waterMl)*100, 100))}% Hidratado
+                      </Text>
+                      <Text style={{ fontSize: 10, color: '#3B82F6', fontWeight: '600', marginTop: 2 }}>
+                          {Math.max(dynamicGoal.waterMl - todaysHydrationMl, 0)} ml restantes
+                      </Text>
+                  </View>
+                  <View style={styles.waterAddBtn}>
+                      <Ionicons name="add" size={14} color="#1E3A8A" />
+                  </View>
               </View>
           </TouchableOpacity>
       </View>
@@ -220,34 +235,39 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                     <Text style={styles.emptyText}>Nenhuma refeição registrada hoje.</Text>
                 </View>
                 ) : (
-                todaysMeals.map((item) => (
-                    <View key={item.id} style={styles.mealCard}>
-                        <View style={styles.mealHeader}>
-                        <View style={styles.mealTitleRow}>
-                            <View style={styles.mealIconWrapper}>
-                                <Ionicons name="restaurant" size={20} color="#4F46E5" />
+                Object.keys(groupedMeals).map(category => (
+                    <View key={category} style={{ marginBottom: 16 }}>
+                        <Text style={styles.categoryTitle}>{category === 'Doce' ? 'Doces' : category === 'Salgado' ? 'Salgados' : category === 'Bebida' ? 'Bebidas' : 'Outros'}</Text>
+                        {groupedMeals[category].map((item) => (
+                            <View key={item.id} style={styles.mealCard}>
+                                <View style={styles.mealHeader}>
+                                <View style={styles.mealTitleRow}>
+                                    <View style={styles.mealIconWrapper}>
+                                        <Ionicons name={category === 'Doce' ? 'ice-cream' : category === 'Bebida' ? 'cafe' : 'restaurant'} size={20} color="#4F46E5" />
+                                    </View>
+                                    <Text style={styles.mealName} numberOfLines={1}>{item.name}</Text>
+                                </View>
+                                <Text style={styles.mealTime}>
+                                    {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </Text>
+                                </View>
+                                
+                                <View style={styles.mealDetails}>
+                                  <Text style={styles.mealCalories}>{Math.round(item.calories)} kcal</Text>
+                                  <View style={styles.mealSummaryMacros}>
+                                      <Text style={styles.mealSummaryText}>P: {Math.round(item.protein)}g</Text>
+                                      <Text style={styles.mealSummaryText}>C: {Math.round(item.carbs)}g</Text>
+                                      <Text style={styles.mealSummaryText}>G: {Math.round(item.fat)}g</Text>
+                                  </View>
+                                </View>
+                                <TouchableOpacity 
+                                    style={styles.deleteMealBtn}
+                                    onPress={() => removeMeal(item.id)}
+                                >
+                                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                                </TouchableOpacity>
                             </View>
-                            <Text style={styles.mealName}>{item.name}</Text>
-                        </View>
-                        <Text style={styles.mealTime}>
-                            {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                        </View>
-                        
-                        <View style={styles.mealDetails}>
-                          <Text style={styles.mealCalories}>{Math.round(item.calories)} kcal</Text>
-                          <View style={styles.mealSummaryMacros}>
-                              <Text style={styles.mealSummaryText}>P: {Math.round(item.protein)}g</Text>
-                              <Text style={styles.mealSummaryText}>C: {Math.round(item.carbs)}g</Text>
-                              <Text style={styles.mealSummaryText}>G: {Math.round(item.fat)}g</Text>
-                          </View>
-                        </View>
-                        <TouchableOpacity 
-                            style={styles.deleteMealBtn}
-                            onPress={() => removeMeal(item.id)}
-                        >
-                            <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                        </TouchableOpacity>
+                        ))}
                     </View>
                 ))
                 )}
@@ -297,14 +317,15 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50, backgroundColor: '#FFFFFF', borderRadius: 32, borderStyle: 'dashed', borderWidth: 2, borderColor: '#E5E7EB' },
   emptyText: { color: '#9CA3AF', marginTop: 16, fontSize: 15, fontWeight: '600' },
   mealCard: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 24, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.02, shadowRadius: 10, elevation: 2 },
-  mealHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  mealTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  mealHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingRight: 24 },
+  mealTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   mealIconWrapper: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  mealName: { fontSize: 17, fontWeight: '700', color: '#111827' },
-  mealTime: { fontSize: 13, color: '#9CA3AF', fontWeight: '600' },
+  mealName: { fontSize: 17, fontWeight: '700', color: '#111827', flex: 1, paddingRight: 4 },
+  mealTime: { fontSize: 13, color: '#9CA3AF', fontWeight: '600', minWidth: 45, textAlign: 'right' },
   mealDetails: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
   mealCalories: { fontSize: 18, fontWeight: '900', color: '#4F46E5' },
   mealSummaryMacros: { flexDirection: 'row', gap: 12 },
   mealSummaryText: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
   deleteMealBtn: { position: 'absolute', top: 16, right: 16, padding: 4 },
+  categoryTitle: { fontSize: 16, fontWeight: '700', color: '#6B7280', marginBottom: 12, marginLeft: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
 });
