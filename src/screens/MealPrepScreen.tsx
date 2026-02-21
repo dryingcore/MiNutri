@@ -7,6 +7,7 @@ import { useMealPlan } from '../contexts/MealPlanContext';
 import { generateWeeklyMeals } from '../services/themealdb';
 import { useNutrition } from '../contexts/NutritionContext';
 import { ShoppingItem } from '../types';
+import Toast from 'react-native-toast-message';
 
 export default function MealPrepScreen() {
   const { planData, setPlanData, shoppingList, setShoppingList, toggleShoppingAcquired } = useMealPlan();
@@ -20,7 +21,7 @@ export default function MealPrepScreen() {
   const handleGenerate = async () => {
       const cals = parseInt(targetCalories);
       if (isNaN(cals) || cals < 500) {
-          Alert.alert('Atenção', 'Insira uma meta calórica válida.');
+          Toast.show({ type: 'error', text1: 'Atenção', text2: 'Insira uma meta calórica válida.' });
           return;
       }
       setIsGenerating(true);
@@ -66,9 +67,9 @@ export default function MealPrepScreen() {
           
           await setPlanData(weekPlan);
           await setShoppingList(list);
-          Alert.alert('Plano Gerado!', 'Seu plano semanal tranduzido e lista de compras estão prontos.');
+          Toast.show({ type: 'success', text1: 'Plano Gerado!', text2: 'Seu plano semanal e lista de compras estão prontos.' });
       } catch (error: any) {
-          Alert.alert('Erro', error.message);
+          Toast.show({ type: 'error', text1: 'Falha na Geração', text2: error.message });
       } finally {
           setIsGenerating(false);
       }

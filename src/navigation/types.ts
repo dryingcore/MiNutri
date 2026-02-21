@@ -18,6 +18,7 @@ export type RootStackParamList = {
   // Main
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   AddMeal: undefined; // Opened as Modal over MainTabs
+  Hydration: undefined; // Hydration Modal
 };
 
 export type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;

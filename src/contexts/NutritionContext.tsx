@@ -1,19 +1,21 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Meal, DailyGoal, Micronutrients } from '../types';
+import { Meal, DailyGoal, Micronutrients, HydrationEntry } from '../types';
 
 interface NutritionContextData {
   meals: Meal[];
   addMeal: (meal: Meal) => Promise<void>;
+  removeMeal: (id: string) => Promise<void>;
   
   dailyGoal: DailyGoal;
   setDailyGoal: (goal: DailyGoal) => Promise<void>;
   
   todaysTotals: DailyGoal & { micronutrients: Micronutrients };
   
-  waterCups: number;
-  addWaterCup: () => Promise<void>;
-  resetWaterCups: () => Promise<void>;
+  hydrationEntries: HydrationEntry[];
+  todaysHydrationMl: number;
+  addHydration: (amountMl: number) => Promise<void>;
+  removeHydration: (id: string) => Promise<void>;
   
   currentStreak: number;
   
@@ -25,7 +27,7 @@ const defaultGoal: DailyGoal = {
   protein: 150,
   carbs: 250,
   fat: 60,
-  waterCups: 8,
+  waterMl: 2000,
 };
 
 const NutritionContext = createContext<NutritionContextData>({} as NutritionContextData);
@@ -33,7 +35,7 @@ const NutritionContext = createContext<NutritionContextData>({} as NutritionCont
 export const NutritionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [dailyGoal, setDailyGoal] = useState<DailyGoal>(defaultGoal);
-  const [waterCups, setWaterCups] = useState(0);
+  const [hydrationEntries, setHydrationEntries] = useState<HydrationEntry[]>([]);
   const [currentStreak, setCurrentStreak] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -45,7 +47,7 @@ export const NutritionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       const storedMeals = await AsyncStorage.getItem('@minutri_meals');
       const storedGoal = await AsyncStorage.getItem('@minutri_goal');
-      const storedWater = await AsyncStorage.getItem('@minutri_water');
+      const storedHydration = await AsyncStorage.getItem('@minutri_hydration');
       const storedStreak = await AsyncStorage.getItem('@minutri_streak');
 
       if (storedMeals) {
@@ -59,13 +61,12 @@ export const NutritionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       if (storedGoal) setDailyGoal(JSON.parse(storedGoal));
       
-      if (storedWater) {
-        // Only load water if it's from today (basic logic: we reset on day change, or check last updated date)
-        const parsed = JSON.parse(storedWater);
-        const lastWaterDate = new Date(parsed.date);
-        if (lastWaterDate.toDateString() === new Date().toDateString()) {
-           setWaterCups(parsed.count);
-        }
+      if (storedHydration) {
+        const parsedHydration = JSON.parse(storedHydration).map((h: any) => ({
+          ...h,
+          timestamp: new Date(h.timestamp),
+        }));
+        setHydrationEntries(parsedHydration);
       }
       
       if (storedStreak) setCurrentStreak(parseInt(storedStreak, 10));
@@ -118,6 +119,17 @@ export const NutritionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const removeMeal = async (id: string) => {
+    try {
+      const updatedMeals = meals.filter(m => m.id !== id);
+      setMeals(updatedMeals);
+      await AsyncStorage.setItem('@minutri_meals', JSON.stringify(updatedMeals));
+      calculateStreak(updatedMeals);
+    } catch (e) {
+      console.error('Failed to remove meal', e);
+    }
+  };
+
   const saveDailyGoal = async (goal: DailyGoal) => {
     try {
       setDailyGoal(goal);
@@ -127,21 +139,29 @@ export const NutritionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const addWaterCup = async () => {
+  const addHydration = async (amountMl: number) => {
     try {
-      const newAmount = waterCups + 1;
-      setWaterCups(newAmount);
-      await AsyncStorage.setItem('@minutri_water', JSON.stringify({ count: newAmount, date: new Date().toISOString() }));
+      const newEntry: HydrationEntry = {
+        id: Date.now().toString(),
+        amountMl,
+        timestamp: new Date(),
+      };
+      const updatedEntries = [newEntry, ...hydrationEntries];
+      setHydrationEntries(updatedEntries);
+      await AsyncStorage.setItem('@minutri_hydration', JSON.stringify(updatedEntries));
     } catch (e) {
-      console.error(e);
+      console.error('Failed to add hydration', e);
     }
   };
 
-  const resetWaterCups = async () => {
-      try {
-        setWaterCups(0);
-        await AsyncStorage.removeItem('@minutri_water');
-      } catch(e) {}
+  const removeHydration = async (id: string) => {
+    try {
+      const updatedEntries = hydrationEntries.filter(h => h.id !== id);
+      setHydrationEntries(updatedEntries);
+      await AsyncStorage.setItem('@minutri_hydration', JSON.stringify(updatedEntries));
+    } catch(e) {
+      console.error('Failed to remove hydration', e);
+    }
   };
 
 
@@ -162,7 +182,7 @@ export const NutritionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         protein: acc.protein + meal.protein,
         carbs: acc.carbs + meal.carbs,
         fat: acc.fat + meal.fat,
-        waterCups: 0, // DTO placeholder, handled separately
+        waterMl: 0,
         micronutrients: {
           calcium: acc.micronutrients.calcium + (micro.calcium || 0),
           iron: acc.micronutrients.iron + (micro.iron || 0),
@@ -172,22 +192,32 @@ export const NutritionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       };
     },
     { 
-       calories: 0, protein: 0, carbs: 0, fat: 0, waterCups: 0,
+       calories: 0, protein: 0, carbs: 0, fat: 0, waterMl: 0,
        micronutrients: { calcium: 0, iron: 0, vitaminA: 0, vitaminC: 0 }
     }
   );
+
+  const todaysHydrationMl = hydrationEntries
+    .filter(h => 
+      h.timestamp.getDate() === today.getDate() &&
+      h.timestamp.getMonth() === today.getMonth() &&
+      h.timestamp.getFullYear() === today.getFullYear()
+    )
+    .reduce((acc, entry) => acc + entry.amountMl, 0);
 
   return (
     <NutritionContext.Provider
       value={{
         meals,
         addMeal,
+        removeMeal,
         dailyGoal,
         setDailyGoal: saveDailyGoal,
         todaysTotals,
-        waterCups,
-        addWaterCup,
-        resetWaterCups,
+        hydrationEntries,
+        todaysHydrationMl,
+        addHydration,
+        removeHydration,
         currentStreak,
         isLoading,
       }}

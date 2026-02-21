@@ -1,25 +1,31 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Dimensions, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, Dimensions, Image, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HomeScreenProps } from '../navigation/types';
 import { useNutrition } from '../contexts/NutritionContext';
+import { useProfile } from '../contexts/ProfileContext';
 import { useAuth } from '../contexts/AuthContext';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { ProgressChart, BarChart } from 'react-native-chart-kit';
+import { PieChart, BarChart } from 'react-native-gifted-charts';
 
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   const { user } = useAuth();
-  const { 
-      meals, todaysTotals, dailyGoal, waterCups, addWaterCup, 
-      currentStreak, resetWaterCups 
-  } = useNutrition();
+  const { meals, todaysTotals, todaysHydrationMl, currentStreak, removeMeal } = useNutrition();
+  const { targets, routine } = useProfile();
   
+  // Dynamic Goal synced from ProfileContext TDEE
+  const dynamicGoal = {
+      calories: targets.macros.calories > 0 ? targets.macros.calories : 2000,
+      protein: targets.macros.protein > 0 ? targets.macros.protein : 150,
+      carbs: targets.macros.carbs > 0 ? targets.macros.carbs : 200,
+      fat: targets.macros.fat > 0 ? targets.macros.fat : 66,
+      waterMl: (targets.macros as any)?.waterMl || (Math.ceil(routine.hydrationGoalMs / 250) * 250) || 2000
+  };
+
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = () => {
     setRefreshing(true);
-    // Real app would fetch latest data here
     setTimeout(() => setRefreshing(false), 1000);
   };
 
@@ -40,46 +46,28 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
   const screenWidth = Dimensions.get('window').width;
 
-  const chartConfig = {
-    backgroundGradientFrom: '#FFFFFF',
-    backgroundGradientTo: '#FFFFFF',
-    color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
-    strokeWidth: 2,
-    barPercentage: 0.5,
-    useShadowColorFromDataset: false,
-  };
+  // Gifted Charts Data for Macros (Donut Chart)
+  const remainingCals = dynamicGoal.calories - todaysTotals.calories;
+  const pieData = [
+    { value: todaysTotals.calories, color: '#4F46E5', shiftTextX: -10 },
+    { value: remainingCals > 0 ? remainingCals : 0, color: '#EEF2FF' }
+  ];
 
-  const macroData = {
-    labels: ['Cal', 'Carb', 'Prot', 'Fat'],
-    data: [
-      Math.min(todaysTotals.calories / dailyGoal.calories, 1),
-      Math.min(todaysTotals.carbs / dailyGoal.carbs, 1),
-      Math.min(todaysTotals.protein / dailyGoal.protein, 1),
-      Math.min(todaysTotals.fat / dailyGoal.fat, 1)
-    ]
-  };
-  
-  // Basic Daily DRIs approximation
-  const microGoals = {
-      calcium: 1000, 
-      iron: 18, 
-      vitaminA: 900,
-      vitaminC: 90
-  };
+  // Gifted Charts Data for Micro Bars
+  const microGoals = { calcium: 1000, iron: 18, vitaminA: 900, vitaminC: 90 };
+  const barData = [
+      { value: Math.min((todaysTotals.micronutrients.calcium / microGoals.calcium)*100, 100), label: 'Cálcio', frontColor: '#10B981' },
+      { value: Math.min((todaysTotals.micronutrients.iron / microGoals.iron)*100, 100), label: 'Ferro', frontColor: '#F59E0B' },
+      { value: Math.min((todaysTotals.micronutrients.vitaminA / microGoals.vitaminA)*100, 100), label: 'Vit A', frontColor: '#3B82F6' },
+      { value: Math.min((todaysTotals.micronutrients.vitaminC / microGoals.vitaminC)*100, 100), label: 'Vit C', frontColor: '#EC4899' },
+  ];
 
-  const microChartData = {
-    labels: ['Cálcio (mg)', 'Ferro (mg)', 'Vit A (mcg)', 'Vit C (mg)'],
-    datasets: [
-      {
-        data: [
-          Math.min(todaysTotals.micronutrients.calcium, microGoals.calcium),
-          Math.min(todaysTotals.micronutrients.iron, microGoals.iron),
-          Math.min(todaysTotals.micronutrients.vitaminA, microGoals.vitaminA),
-          Math.min(todaysTotals.micronutrients.vitaminC, microGoals.vitaminC),
-        ]
-      }
-    ]
-  };
+  // Wellness Score Algorithm
+  const wellnessScore = Math.round(
+    ((Math.min(todaysTotals.calories / dynamicGoal.calories, 1) + 
+      Math.min(todaysTotals.protein / dynamicGoal.protein, 1) + 
+      Math.min(todaysHydrationMl / (dynamicGoal as any).waterMl, 1)) / 3) * 100
+  ) || 0;
 
   const renderHeader = () => (
     <View style={styles.contentPadding}>
@@ -105,68 +93,112 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               <Ionicons name="flame" size={20} color="#EA580C" />
               <Text style={styles.streakText}>{currentStreak} Dias Seguidos</Text>
           </View>
-          <View style={[styles.streakBadge, {backgroundColor: '#DBEAFE'}]}>
+          <TouchableOpacity 
+              style={[styles.streakBadge, {backgroundColor: '#DBEAFE'}]}
+              onPress={() => navigation.navigate('Hydration')}
+          >
               <Ionicons name="water" size={20} color="#2563EB" />
-              <Text style={[styles.streakText, {color: '#1E3A8A'}]}>{waterCups}/{dailyGoal.waterCups} Copos</Text>
-              <TouchableOpacity onPress={addWaterCup} style={styles.waterAddBtn}>
+              <View style={{ flex: 1 }}>
+                  <Text style={[styles.streakText, {color: '#1E3A8A'}]}>
+                      {Math.round(Math.min((todaysHydrationMl / dynamicGoal.waterMl)*100, 100))}% Hidratado
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#3B82F6', fontWeight: '600', marginTop: 2 }}>
+                      {Math.max(dynamicGoal.waterMl - todaysHydrationMl, 0)} ml restantes
+                  </Text>
+              </View>
+              <View style={styles.waterAddBtn}>
                   <Ionicons name="add" size={14} color="#1E3A8A" />
-              </TouchableOpacity>
-          </View>
+              </View>
+          </TouchableOpacity>
+      </View>
+
+      {/* Wellness Score Card */}
+      <View style={styles.wellnessCard}>
+         <View style={styles.wellnessHeader}>
+            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+               <Ionicons name="leaf" size={22} color="#10B981" />
+               <Text style={styles.wellnessTitle}>Score de Bem-estar</Text>
+            </View>
+            <View style={styles.wellnessScoreBadge}>
+                <Text style={styles.wellnessScoreValue}>{wellnessScore}</Text>
+                <Text style={styles.wellnessScoreMax}>/100</Text>
+            </View>
+         </View>
+         <Text style={styles.wellnessSubtitle}>
+            {wellnessScore >= 80 ? 'Excelente! Você está no caminho certo hoje.' : 
+             wellnessScore >= 50 ? 'Bom progresso. Continue focado nas suas metas!' : 
+             'Vamos melhorar esses números hoje! Comece registrando suas refeições.'}
+         </Text>
       </View>
 
       <Text style={styles.sectionTitle}>Resumo de Macros</Text>
       
       <View style={styles.summaryContainer}>
-          <View style={styles.macroPillRow}>
-              <View style={[styles.macroPill, {backgroundColor: '#EEF2FF'}]}>
-                  <Text style={[styles.macroLabel, {color: '#4F46E5'}]}>Proteína</Text>
-                  <Text style={[styles.macroValue, {color: '#312E81'}]}>{Math.round(todaysTotals.protein)}g</Text>
-                  <Text style={styles.macroTarget}>/ {dailyGoal.protein}g</Text>
-              </View>
-              <View style={[styles.macroPill, {backgroundColor: '#FEF3C7'}]}>
-                  <Text style={[styles.macroLabel, {color: '#D97706'}]}>Carbo</Text>
-                  <Text style={[styles.macroValue, {color: '#92400E'}]}>{Math.round(todaysTotals.carbs)}g</Text>
-                  <Text style={styles.macroTarget}>/ {dailyGoal.carbs}g</Text>
-              </View>
-              <View style={[styles.macroPill, {backgroundColor: '#FCE7F3'}]}>
-                  <Text style={[styles.macroLabel, {color: '#DB2777'}]}>Gordura</Text>
-                  <Text style={[styles.macroValue, {color: '#9D174D'}]}>{Math.round(todaysTotals.fat)}g</Text>
-                  <Text style={styles.macroTarget}>/ {dailyGoal.fat}g</Text>
-              </View>
-          </View>
-          
           <View style={styles.chartWrapper}>
-              <ProgressChart
-                data={macroData}
-                width={screenWidth - 96}
-                height={160}
-                strokeWidth={14}
-                radius={24}
-                chartConfig={chartConfig}
-                hideLegend={false}
+             <PieChart
+                donut
+                innerRadius={65}
+                radius={85}
+                data={pieData}
+                centerLabelComponent={() => {
+                  return (
+                    <View style={{justifyContent: 'center', alignItems: 'center'}}>
+                      <Text style={{fontSize: 28, color: '#111827', fontWeight: '900'}}>{Math.round(todaysTotals.calories)}</Text>
+                      <Text style={{fontSize: 14, color: '#6B7280', fontWeight: '600'}}>kcal consumidas</Text>
+                    </View>
+                  );
+                }}
               />
+          </View>
+
+          <View style={styles.macroBarsContainer}>
+              {/* Protein */}
+              <View style={styles.macroBarRow}>
+                  <Text style={[styles.macroBarLabel, {color: '#4F46E5'}]}>Proteína</Text>
+                  <View style={styles.macroBarTrack}>
+                      <View style={[styles.macroBarFill, { backgroundColor: '#4F46E5', width: `${Math.min((todaysTotals.protein / dynamicGoal.protein) * 100, 100)}%`}]} />
+                  </View>
+                  <Text style={styles.macroBarValue}>{Math.round(todaysTotals.protein)}/{dynamicGoal.protein}g</Text>
+              </View>
+              {/* Carbs */}
+              <View style={styles.macroBarRow}>
+                  <Text style={[styles.macroBarLabel, {color: '#D97706'}]}>Carbo</Text>
+                  <View style={styles.macroBarTrack}>
+                      <View style={[styles.macroBarFill, { backgroundColor: '#D97706', width: `${Math.min((todaysTotals.carbs / dynamicGoal.carbs) * 100, 100)}%`}]} />
+                  </View>
+                  <Text style={styles.macroBarValue}>{Math.round(todaysTotals.carbs)}/{dynamicGoal.carbs}g</Text>
+              </View>
+              {/* Fat */}
+              <View style={styles.macroBarRow}>
+                  <Text style={[styles.macroBarLabel, {color: '#DB2777'}]}>Gordura</Text>
+                  <View style={styles.macroBarTrack}>
+                      <View style={[styles.macroBarFill, { backgroundColor: '#DB2777', width: `${Math.min((todaysTotals.fat / dynamicGoal.fat) * 100, 100)}%`}]} />
+                  </View>
+                  <Text style={styles.macroBarValue}>{Math.round(todaysTotals.fat)}/{dynamicGoal.fat}g</Text>
+              </View>
           </View>
       </View>
 
-      <Text style={styles.sectionTitle}>Micronutrientes</Text>
+      <Text style={styles.sectionTitle}>Micronutrientes (%)</Text>
       <View style={styles.microContainer}>
-         <BarChart 
-            data={microChartData}
-            width={screenWidth - 88}
-            height={220}
-            yAxisLabel=""
-            yAxisSuffix=""
-            chartConfig={{
-                ...chartConfig,
-                color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
-                barPercentage: 0.8
-            }}
-            showValuesOnTopOfBars
-         />
+          <BarChart
+            data={barData}
+            barWidth={32}
+            spacing={24}
+            roundedTop
+            roundedBottom
+            hideRules
+            xAxisThickness={0}
+            yAxisThickness={0}
+            yAxisTextStyle={{color: 'transparent'}}
+            noOfSections={3}
+            maxValue={100}
+            isAnimated
+          />
       </View>
 
       <View style={styles.mealsHeader}>
-        <Text style={styles.sectionTitle}>Refeições de Hoje</Text>
+        <Text style={styles.sectionTitle}>Registo de Hoje</Text>
       </View>
 
     </View>
@@ -177,9 +209,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         <ScrollView 
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 130 }}
-            refreshControl={
-               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" />}
         >
             {renderHeader()}
             
@@ -205,13 +235,19 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                         </View>
                         
                         <View style={styles.mealDetails}>
-                        <Text style={styles.mealCalories}>{Math.round(item.calories)} kcal</Text>
-                        <View style={styles.mealSummaryMacros}>
-                            <Text style={styles.mealSummaryText}>P: {Math.round(item.protein)}g</Text>
-                            <Text style={styles.mealSummaryText}>C: {Math.round(item.carbs)}g</Text>
-                            <Text style={styles.mealSummaryText}>G: {Math.round(item.fat)}g</Text>
+                          <Text style={styles.mealCalories}>{Math.round(item.calories)} kcal</Text>
+                          <View style={styles.mealSummaryMacros}>
+                              <Text style={styles.mealSummaryText}>P: {Math.round(item.protein)}g</Text>
+                              <Text style={styles.mealSummaryText}>C: {Math.round(item.carbs)}g</Text>
+                              <Text style={styles.mealSummaryText}>G: {Math.round(item.fat)}g</Text>
+                          </View>
                         </View>
-                        </View>
+                        <TouchableOpacity 
+                            style={styles.deleteMealBtn}
+                            onPress={() => removeMeal(item.id)}
+                        >
+                            <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                        </TouchableOpacity>
                     </View>
                 ))
                 )}
@@ -238,18 +274,26 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 16 },
   summaryContainer: { backgroundColor: '#FFFFFF', borderRadius: 32, padding: 24, marginBottom: 32, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.05, shadowRadius: 24, elevation: 6 },
   
-  macroPillRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  macroPill: { flex: 1, borderRadius: 20, padding: 16, marginHorizontal: 4, alignItems: 'flex-start' },
-  macroLabel: { fontSize: 13, fontWeight: '700', marginBottom: 6 },
-  macroValue: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
-  macroTarget: { fontSize: 12, fontWeight: '600', color: '#9CA3AF', marginTop: 2 },
+  wellnessCard: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20, marginBottom: 32, shadowColor: '#10B981', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 16, elevation: 4, borderWidth: 1, borderColor: '#ECFDF5' },
+  wellnessHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  wellnessTitle: { fontSize: 16, fontWeight: '800', color: '#065F46', marginLeft: 8 },
+  wellnessScoreBadge: { flexDirection: 'row', alignItems: 'baseline', backgroundColor: '#D1FAE5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  wellnessScoreValue: { fontSize: 20, fontWeight: '900', color: '#047857' },
+  wellnessScoreMax: { fontSize: 12, fontWeight: '700', color: '#059669', marginLeft: 2 },
+  wellnessSubtitle: { fontSize: 13, color: '#34D399', fontWeight: '600', lineHeight: 20 },
+
+  macroBarsContainer: { marginTop: 28, gap: 16 },
+  macroBarRow: { flexDirection: 'row', alignItems: 'center' },
+  macroBarLabel: { width: 65, fontSize: 13, fontWeight: '800', textTransform: 'uppercase' },
+  macroBarTrack: { flex: 1, height: 10, backgroundColor: '#F3F4F6', borderRadius: 5, marginHorizontal: 12, overflow: 'hidden' },
+  macroBarFill: { height: '100%', borderRadius: 5 },
+  macroBarValue: { width: 55, fontSize: 12, fontWeight: '700', color: '#4B5563', textAlign: 'right' },
   
   chartWrapper: { alignItems: 'center', justifyContent: 'center', marginTop: 10 },
   
-  microContainer: { backgroundColor: '#FFFFFF', borderRadius: 32, padding: 20, marginBottom: 32, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.05, shadowRadius: 24, elevation: 6 },
+  microContainer: { backgroundColor: '#FFFFFF', borderRadius: 32, padding: 24, paddingTop: 32, marginBottom: 32, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.05, shadowRadius: 24, elevation: 6 },
 
   mealsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  addMealBtn: { padding: 8 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50, backgroundColor: '#FFFFFF', borderRadius: 32, borderStyle: 'dashed', borderWidth: 2, borderColor: '#E5E7EB' },
   emptyText: { color: '#9CA3AF', marginTop: 16, fontSize: 15, fontWeight: '600' },
   mealCard: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 24, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.02, shadowRadius: 10, elevation: 2 },
@@ -262,4 +306,5 @@ const styles = StyleSheet.create({
   mealCalories: { fontSize: 18, fontWeight: '900', color: '#4F46E5' },
   mealSummaryMacros: { flexDirection: 'row', gap: 12 },
   mealSummaryText: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
+  deleteMealBtn: { position: 'absolute', top: 16, right: 16, padding: 4 },
 });

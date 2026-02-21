@@ -10,6 +10,7 @@ import { Meal } from '../types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
 
 export default function AddMealScreen({ navigation }: AddMealScreenProps) {
   const { addMeal } = useNutrition();
@@ -35,7 +36,7 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
       if (!permission?.granted) {
           const req = await requestPermission();
           if (!req.granted) {
-            Alert.alert('Atenção', 'Precisamos da permissão de câmera para ler códigos.');
+            Toast.show({ type: 'error', text1: 'Atenção', text2: 'Precisamos da permissão de câmera para ler códigos.' });
             return;
           }
       }
@@ -63,10 +64,10 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
         };
 
         await addMeal(newMeal);
-        Alert.alert('✅ Produto Encontrado!', `${product.brand} - ${product.productName} registrado com base em 100g/ml.`);
+        Toast.show({ type: 'success', text1: '✅ Produto Encontrado!', text2: `${product.brand} - ${product.productName} registrado (100g/ml)` });
         navigation.goBack();
     } catch (e: any) {
-        Alert.alert('Erro no Escaneamento', e.message);
+        Toast.show({ type: 'error', text1: 'Erro no Escaneamento', text2: e.message });
         setTimeout(() => setScanned(false), 2500); // allow scanning again after 2.5s if it fails
     } finally {
         setIsFetchingBarcode(false);
@@ -78,7 +79,7 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Precisamos de acesso à sua câmera.');
+      Toast.show({ type: 'error', text1: 'Acesso Negado', text2: 'Precisamos de acesso à sua câmera.' });
       return;
     }
 
@@ -101,7 +102,7 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Precisamos de acesso à sua galeria.');
+      Toast.show({ type: 'error', text1: 'Acesso Negado', text2: 'Precisamos de acesso à sua galeria.' });
       return;
     }
 
@@ -131,7 +132,7 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
       setIngredients(ingredients);
       setStep(2);
     } catch (e: any) {
-      Alert.alert('Erro', e.message);
+      Toast.show({ type: 'error', text1: 'Erro de IA', text2: e.message });
     } finally {
       setIsIdentifying(false);
     }
@@ -159,12 +160,12 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
   // STEP 2: Calculate Macros
   const handleCalculate = async () => {
     if (ingredients.length === 0) {
-        Alert.alert('Atenção', 'Adicione pelo menos um ingrediente para calcular.');
+        Toast.show({ type: 'info', text1: 'Atenção', text2: 'Adicione pelo menos um ingrediente para calcular.' });
         return;
     }
     // Validation
     if (ingredients.some(i => i.name.trim() === '')) {
-       Alert.alert('Aviso', 'Existem ingredientes sem nome preenchido.');
+       Toast.show({ type: 'info', text1: 'Aviso', text2: 'Existem ingredientes em branco.' });
        return;
     }
 
@@ -185,10 +186,10 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
       };
 
       await addMeal(newMeal);
-      Alert.alert('✨ Sucesso!', 'Sua refeição foi registrada com os valores nutricionais ajustados.');
+      Toast.show({ type: 'success', text1: '✨ Refeição Salva!', text2: 'Valores nutricionais registrados no painel.' });
       navigation.goBack();
     } catch (e: any) {
-      Alert.alert('Erro', e.message);
+      Toast.show({ type: 'error', text1: 'Erro de Cálculo', text2: e.message });
     } finally {
       setIsCalculating(false);
     }

@@ -17,6 +17,8 @@ import HomeScreen from '../screens/HomeScreen';
 import AddMealScreen from '../screens/AddMealScreen';
 import MealPrepScreen from '../screens/MealPrepScreen';
 import SymptomDiaryScreen from '../screens/SymptomDiaryScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import HydrationScreen from '../screens/HydrationScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -101,12 +103,7 @@ function TabNavigator() {
             />
 
             <Tab.Screen name="Sintomas" component={SymptomDiaryScreen} />
-            <Tab.Screen name="Perfil" component={View} listeners={({ navigation }) => ({
-                    tabPress: e => {
-                        e.preventDefault();
-                        // Optional Profile placeholder / signOut handler
-                    }
-             })}/>
+            <Tab.Screen name="Perfil" component={ProfileScreen} />
         </Tab.Navigator>
     )
 }
@@ -141,6 +138,14 @@ export default function AppNavigator() {
             <Stack.Screen 
               name="AddMeal" 
               component={AddMealScreen} 
+              options={{ 
+                presentation: 'modal',
+                headerShown: false
+              }} 
+            />
+            <Stack.Screen 
+              name="Hydration" 
+              component={HydrationScreen} 
               options={{ 
                 presentation: 'modal',
                 headerShown: false

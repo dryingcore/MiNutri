@@ -26,7 +26,13 @@ export interface DailyGoal {
   protein: number;
   carbs: number;
   fat: number;
-  waterCups: number; // daily goal for glasses of water
+  waterMl: number; // daily goal in ml
+}
+
+export interface HydrationEntry {
+  id: string;
+  amountMl: number;
+  timestamp: Date;
 }
 
 export interface SymptomLog {

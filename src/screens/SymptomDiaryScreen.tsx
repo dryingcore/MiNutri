@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSymptoms } from '../contexts/SymptomContext';
 import { useNutrition } from '../contexts/NutritionContext';
+import Toast from 'react-native-toast-message';
 
 const COMMON_SYMPTOMS = ['Inchaço', 'Fadiga', 'Dor de Cabeça', 'Gases', 'Azia', 'Enjoo'];
 
@@ -22,7 +23,7 @@ export default function SymptomDiaryScreen() {
   const handleSaveSymptom = () => {
       const finalSymptom = customSymptom.trim() || selectedSymptom;
       if (!finalSymptom) {
-          Alert.alert('Atenção', 'Selecione ou digite um sintoma.');
+          Toast.show({ type: 'error', text1: 'Atenção', text2: 'Selecione ou digite um sintoma.' });
           return;
       }
 
