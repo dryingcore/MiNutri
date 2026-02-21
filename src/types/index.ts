@@ -1,8 +1,16 @@
+export interface Micronutrients {
+  calcium: number; // mg
+  iron: number; // mg
+  vitaminA: number; // mcg
+  vitaminC: number; // mg
+}
+
 export interface Nutrients {
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
+  micronutrients?: Micronutrients;
 }
 
 export interface Meal extends Nutrients {
@@ -18,4 +26,27 @@ export interface DailyGoal {
   protein: number;
   carbs: number;
   fat: number;
+  waterCups: number; // daily goal for glasses of water
+}
+
+export interface SymptomLog {
+  id: string;
+  symptom: string;
+  severity: 1 | 2 | 3 | 4 | 5; // 1 to 5 scale
+  timestamp: Date;
+  notes?: string;
+}
+
+export interface MealPlanDay {
+  date: string; // YYYY-MM-DD
+  meals: Array<{ id: string; title: string; image?: string; instructions?: string; readyInMinutes?: number }>;
+  nutrients: { calories: number; protein: number; fat: number; carbohydrates: number };
+}
+
+export interface ShoppingItem {
+  id: number;
+  name: string;
+  amount: number;
+  unit: string;
+  acquired: boolean;
 }

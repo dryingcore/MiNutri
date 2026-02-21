@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const GEMINI_API_KEY = "AIzaSyByA993E1bbeNaBcEGAB6aTfsR3ST36xTQ";
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-
+export const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 export interface IdentifiedIngredient {
   id: string; // for UI list unique keys
   name: string;
@@ -72,11 +72,17 @@ export const calculateMacros = async (mealName: string, ingredients: IdentifiedI
       "protein": number, 
       "carbs": number, 
       "fat": number, 
+      "micronutrients": {
+         "calcium": number, // em mg
+         "iron": number, // em mg
+         "vitaminA": number, // em mcg
+         "vitaminC": number // em mg
+      },
       "breakdown": [
         { "item": string, "grams": number, "calories": number }
       ] 
     }
-    Seja minucioso na conversão de gramas para calorias e macros baseando-se em tabelas nutricionais oficiais TACO. Retorne APENAS o JSON.`;
+    Seja minucioso na conversão de gramas para calorias, macros e micros baseando-se em tabelas nutricionais oficiais TACO/USDA. Retorne APENAS o JSON de forma direta (sem \`\`\`json no topo).`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;

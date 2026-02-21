@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { AddMealScreenProps } from '../navigation/types';
 import { useNutrition } from '../contexts/NutritionContext';
 import { identifyIngredients, calculateMacros, IdentifiedIngredient } from '../services/gemini';
+import { fetchProductByBarcode } from '../services/openfoodfacts';
 import { Meal } from '../types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +16,12 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   
+  // Tabs & Modes
+  const [activeMode, setActiveMode] = useState<'plate' | 'barcode'>('plate');
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
+  const [isFetchingBarcode, setIsFetchingBarcode] = useState(false);
+
   // New States for Two-Step Process
   const [step, setStep] = useState<1 | 2>(1);
   const [isIdentifying, setIsIdentifying] = useState(false);
@@ -22,6 +30,51 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
   const [mealName, setMealName] = useState("Minha Refeição");
   const [ingredients, setIngredients] = useState<IdentifiedIngredient[]>([]);
 
+  // ---- BARCODE LOGIC ----
+  const startScanning = async () => {
+      if (!permission?.granted) {
+          const req = await requestPermission();
+          if (!req.granted) {
+            Alert.alert('Atenção', 'Precisamos da permissão de câmera para ler códigos.');
+            return;
+          }
+      }
+      setActiveMode('barcode');
+      setScanned(false);
+  };
+
+  const handleBarCodeScanned = async ({ type, data }: { type: string, data: string }) => {
+    if (scanned) return;
+    setScanned(true);
+    setIsFetchingBarcode(true);
+    try {
+        const product = await fetchProductByBarcode(data);
+        
+        const newMeal: Meal = {
+            id: Math.random().toString(36).substring(7),
+            timestamp: new Date(),
+            imageUrl: product.image || undefined,
+            name: product.productName,
+            calories: product.macros.calories || 0,
+            protein: product.macros.protein || 0,
+            carbs: product.macros.carbs || 0,
+            fat: product.macros.fat || 0,
+            breakdown: [{item: product.productName, grams: 100, calories: product.macros.calories || 0}], 
+        };
+
+        await addMeal(newMeal);
+        Alert.alert('✅ Produto Encontrado!', `${product.brand} - ${product.productName} registrado com base em 100g/ml.`);
+        navigation.goBack();
+    } catch (e: any) {
+        Alert.alert('Erro no Escaneamento', e.message);
+        setTimeout(() => setScanned(false), 2500); // allow scanning again after 2.5s if it fails
+    } finally {
+        setIsFetchingBarcode(false);
+    }
+  };
+
+
+  // ---- PLATE LOGIC ----
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
@@ -123,7 +176,7 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
         id: Math.random().toString(36).substring(7),
         timestamp: new Date(),
         imageUrl: imageUri || undefined,
-        name: mealName, // use user-edited name potentially
+        name: mealName,
         calories: data.calories || 0,
         protein: data.protein || 0,
         carbs: data.carbs || 0,
@@ -150,13 +203,59 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
           <View style={styles.topBar}>
+            <View style={styles.modeTabs}>
+                <TouchableOpacity 
+                   style={[styles.modeTab, activeMode === 'plate' && styles.modeTabActive]}
+                   onPress={() => setActiveMode('plate')}
+                >
+                   <Text style={[styles.modeTabText, activeMode === 'plate' && styles.modeTabTextActive]}>Prato</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                   style={[styles.modeTab, activeMode === 'barcode' && styles.modeTabActive]}
+                   onPress={startScanning}
+                >
+                   <Text style={[styles.modeTabText, activeMode === 'barcode' && styles.modeTabTextActive]}>Código (Produto)</Text>
+                </TouchableOpacity>
+            </View>
+
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
               <Ionicons name="close" size={24} color="#111827" />
             </TouchableOpacity>
           </View>
 
-          {step === 1 ? (
-              // ========= STEP 1 UI =========
+          {activeMode === 'barcode' ? (
+              // ========= BARCODE SCANNER UI =========
+              <View style={styles.stepContainer}>
+                  <View style={styles.headerBlock}>
+                      <Text style={styles.title}>Escanear Produto</Text>
+                      <Text style={styles.subtitle}>
+                          Aponte a câmera para o código de barras de um produto para extrair o rótulo diretamente do Open Food Facts.
+                      </Text>
+                  </View>
+
+                  <View style={styles.scannerContainer}>
+                      {permission && permission.granted ? (
+                          <CameraView 
+                              style={StyleSheet.absoluteFillObject}
+                              barcodeScannerSettings={{
+                                  barcodeTypes: ["ean13", "ean8", "upc_e", "upc_a", "qr"],
+                              }}
+                              onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+                          />
+                      ) : (
+                          <Text style={{padding: 20, textAlign: 'center', color: '#6B7280'}}>Permissão de Câmera Negada.</Text>
+                      )}
+                      
+                      {isFetchingBarcode && (
+                          <View style={styles.scannerOverlay}>
+                              <ActivityIndicator size="large" color="#FFFFFF" />
+                              <Text style={styles.scannerLoadingText}>Buscando tabela nacional...</Text>
+                          </View>
+                      )}
+                  </View>
+              </View>
+          ) : step === 1 ? (
+              // ========= STEP 1 (PLATE) UI =========
               <View style={styles.stepContainer}>
                 <View style={styles.headerBlock}>
                     <Text style={styles.title}>Analise seu Prato</Text>
@@ -175,7 +274,7 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
                 ) : (
                     <View style={styles.placeholderContainer}>
                     <View style={styles.cameraIconBg}>
-                        <Ionicons name="camera-outline" size={36} color="#4F46E5" />
+                        <Ionicons name="images-outline" size={36} color="#4F46E5" />
                     </View>
                     <Text style={styles.placeholderText}>Toque para enviar uma foto</Text>
                     <Text style={styles.placeholderSub}>ou use os botões abaixo</Text>
@@ -205,17 +304,17 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
                             <ActivityIndicator color="#FFFFFF" size="small" />
                         ) : (
                             <>
-                                <Ionicons name="search" size={20} color="#FFFFFF" />
-                                <Text style={styles.primaryButtonText}>Identificar Ingredientes</Text>
+                                <Ionicons name="sparkles" size={20} color="#FFFFFF" />
+                                <Text style={styles.primaryButtonText}>Avançar e Extrair</Text>
                             </>
                         )}
                     </LinearGradient>
                 </TouchableOpacity>
                 )}
-                {isIdentifying && <Text style={styles.loadingText}>Analisando a foto. Aguarde um instante...</Text>}
+                {isIdentifying && <Text style={styles.loadingText}>A IA está trabalhando no seu prato...</Text>}
               </View>
           ) : (
-              // ========= STEP 2 UI =========
+              // ========= STEP 2 (PLATE) UI =========
               <View style={styles.stepContainer}>
                   <View style={styles.headerBlock}>
                     <Text style={styles.title}>Revise sua Refeição</Text>
@@ -285,7 +384,7 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
                           )}
                       </LinearGradient>
                   </TouchableOpacity>
-                  {isCalculating && <Text style={[styles.loadingText, {color: '#10B981'}]}>Calculando tabelas nutricionais...</Text>}
+                  {isCalculating && <Text style={[styles.loadingText, {color: '#10B981'}]}>Cruzando dados de micro e macros...</Text>}
               </View>
           )}
 
@@ -299,14 +398,24 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F9FAFB' },
   container: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 10, paddingBottom: 40, alignItems: 'center' },
   stepContainer: { width: '100%', alignItems: 'center' },
-  topBar: { width: '100%', flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 10 },
+  topBar: { width: '100%', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  modeTabs: { flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 20, padding: 4 },
+  modeTab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 },
+  modeTabActive: { backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  modeTabText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
+  modeTabTextActive: { color: '#4F46E5', fontWeight: '800' },
   backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  headerBlock: { width: '100%', alignItems: 'flex-start', marginBottom: 32 },
+  headerBlock: { width: '100%', alignItems: 'flex-start', marginBottom: 28 },
   title: { fontSize: 28, fontWeight: '900', color: '#111827', marginBottom: 8, letterSpacing: -0.5 },
   subtitle: { fontSize: 16, color: '#6B7280', lineHeight: 24, fontWeight: '500' },
+  
+  scannerContainer: { width: '100%', aspectRatio: 1, borderRadius: 32, overflow: 'hidden', backgroundColor: '#000000', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.2, shadowRadius: 20, elevation: 8, justifyContent: 'center', alignItems: 'center' },
+  scannerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  scannerLoadingText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16, marginTop: 12 },
+
   imageContainer: { width: '100%', aspectRatio: 4 / 3, backgroundColor: '#FFFFFF', borderRadius: 32, overflow: 'hidden', marginBottom: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 8 },
   imageContainerEmpty: { borderWidth: 2, borderColor: '#E5E7EB', borderStyle: 'dashed', shadowOpacity: 0, elevation: 0, backgroundColor: '#F9FAFB' },
-  previewImage: { width: '100%', height: '100%' }, // Added resizeMode inline
+  previewImage: { width: '100%', height: '100%' },
   placeholderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   cameraIconBg: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   placeholderText: { color: '#4B5563', fontWeight: '700', fontSize: 16, marginBottom: 4 },
@@ -319,7 +428,6 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#FFFFFF', fontWeight: '800', fontSize: 18, letterSpacing: 0.5 },
   loadingText: { marginTop: 20, color: '#6366F1', fontWeight: '600', fontSize: 14, textAlign: 'center' },
   
-  // Step 2 Styles
   nameInputContainer: { width: '100%', marginBottom: 24 },
   label: { fontSize: 15, fontWeight: '700', color: '#374151', marginBottom: 8, marginLeft: 4 },
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: '#111827', fontWeight: '500' },
