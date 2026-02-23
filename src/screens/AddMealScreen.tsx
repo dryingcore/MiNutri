@@ -78,6 +78,12 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
           protein: (scannedProduct?.macros.protein || 0) * ratio,
           carbs: (scannedProduct?.macros.carbs || 0) * ratio,
           fat: (scannedProduct?.macros.fat || 0) * ratio,
+          micronutrients: {
+              calcium: (scannedProduct?.macros.micronutrients?.calcium || 0) * ratio,
+              iron: (scannedProduct?.macros.micronutrients?.iron || 0) * ratio,
+              vitaminA: (scannedProduct?.macros.micronutrients?.vitaminA || 0) * ratio,
+              vitaminC: (scannedProduct?.macros.micronutrients?.vitaminC || 0) * ratio,
+          },
           breakdown: [{item: scannedProduct?.productName, grams: amount, calories: (scannedProduct?.macros.calories || 0) * ratio}], 
           category: 'Outro'
       };
@@ -195,6 +201,12 @@ export default function AddMealScreen({ navigation }: AddMealScreenProps) {
         protein: data.protein || 0,
         carbs: data.carbs || 0,
         fat: data.fat || 0,
+        micronutrients: {
+            calcium: Number(data.micronutrients?.calcium || 0),
+            iron: Number(data.micronutrients?.iron || 0),
+            vitaminA: Number(data.micronutrients?.vitaminA || data.micronutrients?.vitamin_a || 0),
+            vitaminC: Number(data.micronutrients?.vitaminC || data.micronutrients?.vitamin_c || 0)
+        },
         breakdown: data.breakdown || [],
       };
 

@@ -13,6 +13,7 @@ export interface IdentifiedIngredient {
 
 export const identifyIngredients = async (base64Image: string): Promise<{ mealName: string, ingredients: IdentifiedIngredient[] }> => {
   try {
+    console.log('\n[GEMINI API - PASSO 1] Analisando imagem do prato...');
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
     const prompt = `Analise a imagem deste prato de comida e identifique os ingredientes visíveis. Dê um nome criativo para a refeição. Estime a quantidade exata em gramas (number) para cada ingrediente de forma isolada. 
@@ -41,6 +42,9 @@ export const identifyIngredients = async (base64Image: string): Promise<{ mealNa
     const cleanedText = text.replace(/```json\n|\n```/g, '').trim();
     const parsed = JSON.parse(cleanedText);
     
+    console.log(`[GEMINI API - PASSO 1] Identificado: ${parsed.mealName || 'Sua Refeição'}`);
+    console.log(`Ingredientes localizados:`, parsed.ingredients.map((i: any) => `${i.name} (${i.amount_grams}g)`).join(', '));
+
     // Assign random ID for flatlist React keys
     const ingredientsWithIds = (parsed.ingredients || []).map((ing: any) => ({
       ...ing,
@@ -59,13 +63,15 @@ export const identifyIngredients = async (base64Image: string): Promise<{ mealNa
 
 export const calculateMacros = async (mealName: string, ingredients: IdentifiedIngredient[]) => {
   try {
+    console.log(`\n[GEMINI API - PASSO 2] Calculando nutrição para: ${mealName}...`);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
     // Send only name and grams to Gemini to save tokens
     const ingredientsPayload = ingredients.map(i => ({ name: i.name, grams: i.amount_grams }));
 
-    const prompt = `Você é um nutricionista digital. Calcule com precisão as calorias e os macronutrientes para o prato "${mealName}" que contém exatamente a seguinte lista de ingredientes e suas respectivas gramaturas: ${JSON.stringify(ingredientsPayload)}.
+    const prompt = `Você é um nutricionista digital. Calcule com precisão as calorias, os macronutrientes e os micronutrientes (cálcio, ferro, vitamina A, vitamina C) para o prato "${mealName}" que contém exatamente a seguinte lista de ingredientes e suas respectivas gramaturas: ${JSON.stringify(ingredientsPayload)}.
     
+    É MANDATÓRIO que você preencha os valores de micronutrientes com estimativas realistas baseadas nos ingredientes (não retorne zero a não ser que o alimento realmente não tenha nada).
     Retorne APENAS um objeto JSON válido descrevendo o total do prato, seguindo este esquema exato:
     { 
       "calories": number, 
@@ -90,7 +96,13 @@ export const calculateMacros = async (mealName: string, ingredients: IdentifiedI
     const text = response.text();
     
     const cleanedText = text.replace(/```json\n|\n```/g, '').trim();
-    return JSON.parse(cleanedText);
+    const parsedData = JSON.parse(cleanedText);
+
+    console.log(`\n[GEMINI API - PASSO 2] Resumo para: ${mealName}`);
+    console.log(`Macros: ${parsedData.calories} kcal | ${parsedData.protein}g P | ${parsedData.carbs}g C | ${parsedData.fat}g G`);
+    console.log(`Micros: ${parsedData.micronutrients?.calcium || 0}mg Cálcio | ${parsedData.micronutrients?.iron || 0}mg Ferro | ${parsedData.micronutrients?.vitaminA || parsedData.micronutrients?.vitamin_a || 0}mcg Vit A | ${parsedData.micronutrients?.vitaminC || parsedData.micronutrients?.vitamin_c || 0}mg Vit C\n`);
+
+    return parsedData;
   } catch (error) {
     console.error("Error calculating macros:", error);
     throw new Error('Falha ao calcular o valor nutricional da lista. Tente novamente.');
